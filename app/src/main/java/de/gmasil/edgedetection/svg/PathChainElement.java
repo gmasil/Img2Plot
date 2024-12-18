@@ -34,11 +34,9 @@ public class PathChainElement {
     public void reverseChainBackwards(Set<PathChainElement> visitedElements) {
         if(visitedElements.contains(this)) {
             throw new RuntimeException("There cannot be loops in the path chain");
-//            return;
         }
         visitedElements.add(this);
         path.invert();
-        path.setStrokeColor("#0000ff");
         if(previousElement != null) {
             previousElement.reverseChainBackwards(visitedElements);
         }

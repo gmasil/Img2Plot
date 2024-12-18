@@ -1,5 +1,6 @@
 plugins {
     application
+    id("org.graalvm.buildtools.native") version "0.10.4"
 }
 
 repositories {
@@ -14,7 +15,7 @@ dependencies {
 
 java {
     toolchain {
-        languageVersion = JavaLanguageVersion.of(23)
+        languageVersion = JavaLanguageVersion.of(21)
     }
 }
 
@@ -24,4 +25,12 @@ application {
 
 tasks.named<Test>("test") {
     useJUnitPlatform()
+}
+
+graalvmNative {
+    binaries.all {
+        buildArgs.add("-Djava.awt.headless=false")
+        buildArgs.add("-march=native")
+        buildArgs.add("--strict-image-heap")
+    }
 }

@@ -23,11 +23,14 @@ public class EdgeDetection {
         svg.filter(lengthThreshold);
         float travelLength = svg.getTravelLength();
         svg.orderPaths();
+        int maxDistance = Math.min(image.getWidth(), image.getHeight()) / 100;
+        svg.mergeClosePaths(maxDistance);
         float newTravelLength = svg.getTravelLength();
         System.out.println("Travel length: " + travelLength + " -> " + newTravelLength +" (improvement: " + (100-(100*newTravelLength / travelLength)) + "%)");
 
         // travel must be last
         svg.setStrokeWidth(2);
+        svg.save("out-04-result.svg");
         svg.addTravelPaths();
         svg.save("out-03-filtered.svg");
     }

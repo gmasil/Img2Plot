@@ -5,6 +5,10 @@ import de.gmasil.edgedetection.image.EdgeDetection;
 public class App {
 
     public static void main(String[] args) throws Exception {
-        EdgeDetection.handleImage("image.png");
+        String image = "image.png";
+        if(args.length > 0){
+            image = args[0];
+        }
+        EdgeDetection.handleImage(image);
     }
 }

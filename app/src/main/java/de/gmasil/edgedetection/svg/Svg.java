@@ -10,12 +10,9 @@ import java.io.File;
 import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Set;
-import java.util.function.Predicate;
 
 public class Svg {
 
@@ -150,6 +147,31 @@ public class Svg {
             paths.add(currentElement.getPath());
             currentElement = currentElement.getNextElement();
         }
+    }
+
+    public void mergeClosePaths(int maxDistance) {
+        removeTravelPaths();
+        List<Path> mergedPaths = new LinkedList<>();
+        boolean mergedLastPath = false;
+        for (int i = 0; i < paths.size() - 1; i++) {
+            Path p1 = paths.get(i);
+            Path p2 = paths.get(i + 1);
+            if (p1.getLastPoint().distance(p2.getFirstPoint()) < maxDistance) {
+                List<String> args = new LinkedList<>();
+                args.addAll(p1.getArgs());
+                args.addAll(p2.getArgs().subList(3, p2.getArgs().size()));
+                mergedPaths.add(new Path(args));
+                mergedLastPath = true;
+                i++;
+            } else {
+                mergedPaths.add(p1);
+                mergedLastPath = false;
+            }
+        }
+        if(!mergedLastPath) {
+            mergedPaths.add(paths.getLast());
+        }
+        paths = mergedPaths;
     }
 
     @Override
