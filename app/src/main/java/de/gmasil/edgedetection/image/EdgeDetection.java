@@ -11,11 +11,14 @@ import java.util.Arrays;
 
 public class EdgeDetection {
 
-    public static void handleImage(String inputImageFile) throws Exception {
+    public static void handleImage(String inputImageFile, int blurRadius, int edgeThreshold) throws Exception {
         BufferedImage image = ImageIO.read(new File(inputImageFile));
 
-        BufferedImage resultImage = detectEdges(image, 250, true);
-        ImageIO.write(resultImage, "png", new File("out-01-edges.png"));
+        if(blurRadius>0) {
+            image = blurImage(image, blurRadius);
+        }
+        image = detectEdges(image, edgeThreshold, true);
+        ImageIO.write(image, "png", new File("out-01-edges.png"));
 
         runAutotrace("out-01-edges.png", "out-02-traced.svg");
         int lengthThreshold = Math.min(image.getWidth(), image.getHeight()) / 30;
@@ -29,7 +32,7 @@ public class EdgeDetection {
         System.out.println("Travel length: " + travelLength + " -> " + newTravelLength +" (improvement: " + (100-(100*newTravelLength / travelLength)) + "%)");
 
         // travel must be last
-        svg.setStrokeWidth(2);
+        svg.setStrokeWidth(1);
         svg.save("out-04-result.svg");
         svg.addTravelPaths();
         svg.save("out-03-filtered.svg");

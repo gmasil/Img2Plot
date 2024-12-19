@@ -1,3 +1,5 @@
+import org.graalvm.buildtools.gradle.tasks.MetadataCopyTask
+
 plugins {
     application
     id("org.graalvm.buildtools.native") version "0.10.4"
@@ -33,4 +35,27 @@ graalvmNative {
         buildArgs.add("-march=native")
         buildArgs.add("--strict-image-heap")
     }
+    agent {
+        enabled = true
+    }
+}
+
+tasks.named<JavaExec>("run") {
+    args(rootDir.resolve("image.png"), "3", "240", rootDir.resolve("image.jpg"))
+    doLast {
+        projectDir.resolve("out-01-edges.png").delete()
+        projectDir.resolve("out-02-traced.svg").delete()
+        projectDir.resolve("out-03-filtered.svg").delete()
+        projectDir.resolve("out-04-result.svg").delete()
+    }
+}
+
+tasks.withType<MetadataCopyTask>() {
+    inputTaskNames.add("run")
+    outputDirectories.add("src/main/resources/META-INF/native-image")
+    dependsOn("run")
+}
+
+tasks.register("generateMetadata") {
+    dependsOn("metadataCopy")
 }
