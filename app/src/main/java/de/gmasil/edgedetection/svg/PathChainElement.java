@@ -1,18 +1,20 @@
 package de.gmasil.edgedetection.svg;
 
+import de.gmasil.edgedetection.svg.element.SvgElement;
+
 import java.util.Set;
 
 public class PathChainElement {
-    private final Path path;
+    private final SvgElement element;
     private PathChainElement previousElement;
     private PathChainElement nextElement;
 
-    public PathChainElement(Path path) {
-        this.path = path;
+    public PathChainElement(SvgElement element) {
+        this.element = element;
     }
 
-    public Path getPath() {
-        return path;
+    public SvgElement getElement() {
+        return element;
     }
 
     public PathChainElement getPreviousElement() {
@@ -36,7 +38,7 @@ public class PathChainElement {
             throw new RuntimeException("There cannot be loops in the path chain");
         }
         visitedElements.add(this);
-        path.invert();
+        element.invert();
         if(previousElement != null) {
             previousElement.reverseChainBackwards(visitedElements);
         }

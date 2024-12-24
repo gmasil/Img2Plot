@@ -38,7 +38,7 @@ graalvmNative {
         buildArgs.add("--strict-image-heap")
     }
     agent {
-        enabled = true
+        enabled = !project.gradle.startParameter.taskNames.contains(":app:test")
     }
 }
 

@@ -1,5 +1,6 @@
 package de.gmasil.edgedetection.svg;
 
+import de.gmasil.edgedetection.svg.element.SvgElement;
 import org.w3c.dom.Document;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
@@ -29,9 +30,9 @@ public class Svg {
 
     private final int width;
     private final int height;
-    private List<Path> paths;
+    private List<SvgElement> paths;
 
-    public Svg(int width, int height, List<Path> paths) {
+    public Svg(int width, int height, List<SvgElement> paths) {
         this.width = width;
         this.height = height;
         this.paths = paths;
@@ -45,29 +46,34 @@ public class Svg {
         return height;
     }
 
-    public List<Path> getPaths() {
+    public List<SvgElement> getPaths() {
         return paths;
     }
 
     public void filter(int lengthThreshold) {
-        paths = paths.stream().filter(x -> x.getLength() >= lengthThreshold).toList();
+        paths = paths.stream().filter(x -> {
+            if(x instanceof Path) {
+                return ((Path) x).getLength() >= lengthThreshold;
+            }
+            return true;
+        }).toList();
     }
 
     public float getTravelLength(){
         float length = 0;
         for (int i = 0; i < paths.size() - 1; i++) {
-            Path p1 = paths.get(i);
-            Path p2 = paths.get(i + 1);
+            SvgElement p1 = paths.get(i);
+            SvgElement p2 = paths.get(i + 1);
             length += p1.getLastPoint().distance(p2.getFirstPoint());
         }
         return length;
     }
 
     public void removeTravelPaths() {
-        List<Path> filteredPaths = new LinkedList<>();
-        for (Path path : paths) {
-            if (!path.isTravelLine()) {
-                filteredPaths.add(path);
+        List<SvgElement> filteredPaths = new LinkedList<>();
+        for (SvgElement element : paths) {
+            if(!(element instanceof Path path) || !path.isTravelLine()) {
+                filteredPaths.add(element);
             }
         }
         paths = filteredPaths;
@@ -77,19 +83,19 @@ public class Svg {
         removeTravelPaths();
         List<Path> travelPaths = new LinkedList<>();
         for (int i = 0; i < paths.size() - 1; i++) {
-            Path p1 = paths.get(i);
-            Path p2 = paths.get(i + 1);
+            SvgElement p1 = paths.get(i);
+            SvgElement p2 = paths.get(i + 1);
             travelPaths.add(new Path(List.of("M", "" + p1.getLastPoint().x, "" + p1.getLastPoint().y, "L", "" + p2.getFirstPoint().x, "" + p2.getFirstPoint().y), 1, "#ff0000", true));
         }
         this.paths.addAll(travelPaths);
     }
 
     public void invertPaths() {
-        paths.forEach(Path::invert);
+        paths.forEach(SvgElement::invert);
     }
 
     public void setStrokeWidth(float strokeWidth) {
-        for (Path path : paths) {
+        for (SvgElement path : paths) {
             path.setStrokeWidth(strokeWidth);
         }
     }
@@ -109,7 +115,7 @@ public class Svg {
                     if (element != currentElement) {
                         // check path in normal order
                         if (element.getPreviousElement() == null&& !currentElement.isInChainBackwards(element)) {
-                            float distance = currentElement.getPath().getLastPoint().distance(element.getPath().getFirstPoint());
+                            float distance = currentElement.getElement().getLastPoint().distance(element.getElement().getFirstPoint());
                             if (distance < closestDistance) {
                                 closestDistance = distance;
                                 closestPathElement = element;
@@ -118,7 +124,7 @@ public class Svg {
                         }
                         // check path in reverse order
                         if (element.getNextElement() == null) {
-                            float distance = currentElement.getPath().getLastPoint().distance(element.getPath().getLastPoint());
+                            float distance = currentElement.getElement().getLastPoint().distance(element.getElement().getLastPoint());
                             if (distance < closestDistance) {
                                 closestDistance = distance;
                                 closestPathElement = element;
@@ -144,19 +150,19 @@ public class Svg {
             currentElement = currentElement.getPreviousElement();
         }
         while (currentElement != null) {
-            paths.add(currentElement.getPath());
+            paths.add(currentElement.getElement());
             currentElement = currentElement.getNextElement();
         }
     }
 
     public void mergeClosePaths(int maxDistance) {
         removeTravelPaths();
-        List<Path> mergedPaths = new LinkedList<>();
+        List<SvgElement> mergedPaths = new LinkedList<>();
         boolean mergedLastPath = false;
         for (int i = 0; i < paths.size() - 1; i++) {
-            Path p1 = paths.get(i);
-            Path p2 = paths.get(i + 1);
-            if (p1.getLastPoint().distance(p2.getFirstPoint()) < maxDistance) {
+            SvgElement e1 = paths.get(i);
+            SvgElement e2 = paths.get(i + 1);
+            if (e1 instanceof Path p1 && e2 instanceof Path p2 && p1.getLastPoint().distance(p2.getFirstPoint()) < maxDistance) {
                 List<String> args = new LinkedList<>();
                 args.addAll(p1.getArgs());
                 args.addAll(p2.getArgs().subList(3, p2.getArgs().size()));
@@ -164,7 +170,7 @@ public class Svg {
                 mergedLastPath = true;
                 i++;
             } else {
-                mergedPaths.add(p1);
+                mergedPaths.add(e1);
                 mergedLastPath = false;
             }
         }
@@ -177,7 +183,7 @@ public class Svg {
     @Override
     public String toString() {
         List<String> lines = new LinkedList<>(SVG_HEADER.stream().map(x -> x.formatted(width, height)).toList());
-        lines.addAll(paths.stream().map(Path::toString).toList());
+        lines.addAll(paths.stream().map(SvgElement::toSvgString).toList());
         lines.addAll(SVG_FOOTER);
         return String.join("\n", lines);
     }
@@ -210,7 +216,8 @@ public class Svg {
                 contents.add(content.trim());
             }
         }
-        List<Path> paths = new LinkedList<>();
+        // TODO: directly parse into SvgLine or SvgBezierCurve
+        List<SvgElement> paths = new LinkedList<>();
         for (String content : contents) {
             String[] tokens = content.split(" +");
             List<String> args = new LinkedList<>();
