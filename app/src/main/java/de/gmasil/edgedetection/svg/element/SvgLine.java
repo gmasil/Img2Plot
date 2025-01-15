@@ -3,15 +3,17 @@ package de.gmasil.edgedetection.svg.element;
 import de.gmasil.edgedetection.svg.Point;
 
 import java.util.Collections;
+import java.util.LinkedList;
 import java.util.List;
 
 public class SvgLine extends SvgElement {
 
     private static final String TEMPLATE = """
-            <path stroke-width="%f" style="fill:none; stroke:%s;" d="%s"/>
+            <path stroke-width="%f" stroke="%s" fill="none" d="%s"/>
             """.replace("\n", "").trim();
 
     private final List<Point> points;
+    private boolean travel = false;
 
     public SvgLine(Point startPoint, Point endPoint) {
         this(List.of(startPoint, endPoint));
@@ -22,13 +24,30 @@ public class SvgLine extends SvgElement {
     }
 
     public SvgLine(List<Point> points) {
-        this.points = points;
+        this.points = new LinkedList<>(points);
     }
 
     public SvgLine(List<Point> points, float strokeWidth, String strokeColor) {
-        this(points);
+        this.points = new LinkedList<>(points);
         this.strokeWidth = strokeWidth;
         this.strokeColor = strokeColor;
+    }
+
+    public void addLine(SvgLine line) {
+        this.points.addAll(line.getPoints());
+    }
+
+    public List<Point> getPoints() {
+        return points;
+    }
+
+    public boolean isTravel() {
+        return travel;
+    }
+
+    public SvgLine travel() {
+        this.travel = true;
+        return this;
     }
 
     @Override
@@ -62,5 +81,20 @@ public class SvgLine extends SvgElement {
     @Override
     public Point getLastPoint() {
         return points.getLast();
+    }
+
+    @Override
+    public void translate(Point translate) {
+        points.forEach(p -> p.translate(translate));
+    }
+
+    @Override
+    public void scale(Point scale) {
+        points.forEach(p -> p.scale(scale));
+    }
+
+    @Override
+    public float getLength() {
+        return calculateLength(getPoints());
     }
 }

@@ -85,4 +85,25 @@ public class SvgBezierCurve extends SvgElement {
     public Point getLastPoint() {
         return end;
     }
+
+    @Override
+    public void translate(Point p) {
+        start.translate(p);
+        control1.translate(p);
+        control2.translate(p);
+        end.translate(p);
+    }
+
+    @Override
+    public void scale(Point p) {
+        start.scale(p);
+        control1.scale(p);
+        control2.scale(p);
+        end.scale(p);
+    }
+
+    @Override
+    public float getLength() {
+        return calculateLength(toLine(20).getPoints());
+    }
 }

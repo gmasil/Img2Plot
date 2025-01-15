@@ -43,7 +43,7 @@ graalvmNative {
 }
 
 val defaultRun = tasks.named<JavaExec>("run") {
-    args(rootDir.resolve("image.png"), rootDir.resolve("image.jpg"))
+    args(rootDir.resolve("img/2c6cbde1ace4d5709bb3188d6edd41f2.png"), rootDir.resolve("img/8d574a2649e1bdd326ff0548f641fcc5.png"))
     doLast {
         projectDir.resolve("out-01-edges.png").delete()
         projectDir.resolve("out-02-traced.svg").delete()

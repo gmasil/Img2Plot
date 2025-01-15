@@ -1,5 +1,7 @@
 package de.gmasil.edgedetection.image;
 
+import de.gmasil.edgedetection.gcode.Gcode;
+import de.gmasil.edgedetection.svg.Point;
 import de.gmasil.edgedetection.svg.Svg;
 
 import javax.imageio.ImageIO;
@@ -7,36 +9,56 @@ import java.awt.image.BufferedImage;
 import java.awt.image.ConvolveOp;
 import java.awt.image.Kernel;
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.util.Arrays;
 
 public class EdgeDetection {
 
-    public static void handleImage(String inputImageFile, int blurRadius, int edgeThreshold) {
+    public static void handleImage(String inputImageFileName, int blurRadius, int edgeThreshold) {
         try {
-            BufferedImage image = ImageIO.read(new File(inputImageFile));
+            File inputImageFile = new File(inputImageFileName);
+            if(!inputImageFile.exists()) {
+                throw new FileNotFoundException(inputImageFileName);
+            }
+            BufferedImage image = ImageIO.read(inputImageFile);
 
             if (blurRadius > 0) {
                 image = blurImage(image, blurRadius);
             }
             image = detectEdges(image, edgeThreshold, true);
-            ImageIO.write(image, "png", new File("out-01-edges.png"));
+            ImageIO.write(image, "bmp", new File("out-01-edges.bmp"));
 
-            runAutotrace("out-01-edges.png", "out-02-traced.svg");
-            int lengthThreshold = Math.min(image.getWidth(), image.getHeight()) / 30;
+            runAutotrace("out-01-edges.bmp", "out-02-traced.svg");
+
             Svg svg = Svg.loadSvg("out-02-traced.svg");
+
+            int lengthThreshold = Math.min(image.getWidth(), image.getHeight()) / 50;
             svg.filter(lengthThreshold);
+
             float travelLength = svg.getTravelLength();
-            svg.orderPaths();
+            svg.orderPaths(false);
+            // transform before merge
+            svg.scale(new Point(0.1f, -0.1f));
+            svg.translate(new Point(0f, svg.getHeight()));
+            svg.translate(new Point(1f, 1f));
+            // merge
             int maxDistance = Math.min(image.getWidth(), image.getHeight()) / 100;
             svg.mergeClosePaths(maxDistance);
+
+            lengthThreshold = Math.min(image.getWidth(), image.getHeight()) / 10;
+            svg.filter(lengthThreshold);
+
             float newTravelLength = svg.getTravelLength();
             System.out.println("Travel length: " + travelLength + " -> " + newTravelLength + " (improvement: " + (100 - (100 * newTravelLength / travelLength)) + "%)");
 
-            // travel must be last
-            svg.setStrokeWidth(1);
+            svg.setStrokeWidth(1.0f);
             svg.save("out-04-result.svg");
+
+            // travel must be last
             svg.addTravelPaths();
             svg.save("out-03-filtered.svg");
+
+            new Gcode(new Point(0.0f, 0.0f), 0.02f).saveSvgToGCode(svg, "out.gcode");
         } catch(Exception e) {
             throw new RuntimeException(e);
         }
@@ -71,7 +93,7 @@ public class EdgeDetection {
     }
 
     public static void runAutotrace(String input, String output) throws Exception {
-        ProcessBuilder pb = new ProcessBuilder("autotrace",
+        ProcessBuilder pb2 = new ProcessBuilder("autotrace",
                 input,
                 "-output-file", output,
                 "-background-color", "FFFFFF"
@@ -81,6 +103,12 @@ public class EdgeDetection {
 //                "-error-threshold", "20.0",
 //                "-color-count", "0",
 //                "-noise-removal", "0.99"
+        );
+        ProcessBuilder pb = new ProcessBuilder("potrace",
+                input,
+                "-o", output,
+                "-b", "svg",
+                "-t", "500"
         );
         Process p = pb.start();
         int exitCode = p.waitFor();

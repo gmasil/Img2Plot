@@ -47,4 +47,19 @@ public class SvgCircle extends SvgElement {
     public Point getLastPoint() {
         return new Point(center.x - radius, center.y);
     }
+
+    @Override
+    public void translate(Point translate) {
+        center.translate(translate);
+    }
+
+    @Override
+    public void scale(Point scale) {
+        // cannot scale, nothing to do
+    }
+
+    @Override
+    public float getLength() {
+        return 0;
+    }
 }

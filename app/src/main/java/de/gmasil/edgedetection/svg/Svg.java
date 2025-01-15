@@ -1,6 +1,8 @@
 package de.gmasil.edgedetection.svg;
 
+import de.gmasil.edgedetection.svg.element.SvgBezierCurve;
 import de.gmasil.edgedetection.svg.element.SvgElement;
+import de.gmasil.edgedetection.svg.element.SvgLine;
 import org.w3c.dom.Document;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
@@ -10,21 +12,21 @@ import javax.xml.parsers.DocumentBuilderFactory;
 import java.io.File;
 import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.stream.Stream;
 
 public class Svg {
 
-    private static final List<String> SVG_HEADER = Arrays.asList("""
+    private static final List<String> SVG_HEADER = List.of("""
             <?xml version="1.0" standalone="yes"?>
             """.replace("\n", "").trim(), """
             <svg xmlns="http://www.w3.org/2000/svg" width="%d" height="%d">
             """.replace("\n", "").trim(), """
             <rect width="%d" height="%d" x="0" y="0" fill="#ffffff" />
             """.replace("\n", "").trim());
-    private static final List<String> SVG_FOOTER = Arrays.asList("""
+    private static final List<String> SVG_FOOTER = List.of("""
             </svg>
             """.replace("\n", "").trim());
 
@@ -50,16 +52,25 @@ public class Svg {
         return paths;
     }
 
-    public void filter(int lengthThreshold) {
-        paths = paths.stream().filter(x -> {
-            if(x instanceof Path) {
-                return ((Path) x).getLength() >= lengthThreshold;
+    public List<SvgLine> getSvgLines() {
+        return paths.stream().map(el -> {
+            if (el instanceof SvgLine line) {
+                return line;
+            } else if (el instanceof SvgBezierCurve curve) {
+                return curve.toLine(20);
+            } else {
+                throw new IllegalStateException("Invalid element type: " + el.getClass().getSimpleName());
             }
-            return true;
         }).toList();
     }
 
-    public float getTravelLength(){
+    public void filter(int lengthThreshold) {
+        paths = paths.stream().filter(el -> {
+            return el.getLength() >= lengthThreshold;
+        }).toList();
+    }
+
+    public float getTravelLength() {
         float length = 0;
         for (int i = 0; i < paths.size() - 1; i++) {
             SvgElement p1 = paths.get(i);
@@ -72,7 +83,7 @@ public class Svg {
     public void removeTravelPaths() {
         List<SvgElement> filteredPaths = new LinkedList<>();
         for (SvgElement element : paths) {
-            if(!(element instanceof Path path) || !path.isTravelLine()) {
+            if (!(element instanceof SvgLine line) || !line.isTravel()) {
                 filteredPaths.add(element);
             }
         }
@@ -81,11 +92,11 @@ public class Svg {
 
     public void addTravelPaths() {
         removeTravelPaths();
-        List<Path> travelPaths = new LinkedList<>();
+        List<SvgLine> travelPaths = new LinkedList<>();
         for (int i = 0; i < paths.size() - 1; i++) {
             SvgElement p1 = paths.get(i);
             SvgElement p2 = paths.get(i + 1);
-            travelPaths.add(new Path(List.of("M", "" + p1.getLastPoint().x, "" + p1.getLastPoint().y, "L", "" + p2.getFirstPoint().x, "" + p2.getFirstPoint().y), 1, "#ff0000", true));
+            travelPaths.add(new SvgLine(p1.getLastPoint(), p2.getFirstPoint(), 20.0f, "#ff0000").travel());
         }
         this.paths.addAll(travelPaths);
     }
@@ -100,10 +111,18 @@ public class Svg {
         }
     }
 
-    public void orderPaths() {
+    public void translate(Point p) {
+        paths.forEach(element -> element.translate(p));
+    }
+
+    public void scale(Point p) {
+        paths.forEach(element -> element.scale(p));
+    }
+
+    public void orderPaths(boolean allowReversing) {
         List<PathChainElement> pathChain = getPaths().stream().map(PathChainElement::new).toList();
         paths = new LinkedList<>();
-        while(pathChain.stream().filter(x -> x.getPreviousElement() == null || x.getNextElement() == null).count() > 2) {
+        while (pathChain.stream().filter(x -> x.getPreviousElement() == null || x.getNextElement() == null).count() > 2) {
             for (PathChainElement currentElement : pathChain) {
                 if (currentElement.getNextElement() != null) {
                     continue;
@@ -114,7 +133,7 @@ public class Svg {
                 for (PathChainElement element : pathChain) {
                     if (element != currentElement) {
                         // check path in normal order
-                        if (element.getPreviousElement() == null&& !currentElement.isInChainBackwards(element)) {
+                        if (element.getPreviousElement() == null && !currentElement.isInChainBackwards(element)) {
                             float distance = currentElement.getElement().getLastPoint().distance(element.getElement().getFirstPoint());
                             if (distance < closestDistance) {
                                 closestDistance = distance;
@@ -123,7 +142,7 @@ public class Svg {
                             }
                         }
                         // check path in reverse order
-                        if (element.getNextElement() == null) {
+                        if (allowReversing && element.getNextElement() == null) {
                             float distance = currentElement.getElement().getLastPoint().distance(element.getElement().getLastPoint());
                             if (distance < closestDistance) {
                                 closestDistance = distance;
@@ -155,29 +174,23 @@ public class Svg {
         }
     }
 
-    public void mergeClosePaths(int maxDistance) {
+    public void mergeClosePaths(float maxDistance) {
         removeTravelPaths();
-        List<SvgElement> mergedPaths = new LinkedList<>();
-        boolean mergedLastPath = false;
-        for (int i = 0; i < paths.size() - 1; i++) {
-            SvgElement e1 = paths.get(i);
-            SvgElement e2 = paths.get(i + 1);
-            if (e1 instanceof Path p1 && e2 instanceof Path p2 && p1.getLastPoint().distance(p2.getFirstPoint()) < maxDistance) {
-                List<String> args = new LinkedList<>();
-                args.addAll(p1.getArgs());
-                args.addAll(p2.getArgs().subList(3, p2.getArgs().size()));
-                mergedPaths.add(new Path(args));
-                mergedLastPath = true;
-                i++;
+        List<SvgLine> lines = getSvgLines();
+        List<SvgLine> mergedLines = new LinkedList<>();
+        mergedLines.add(lines.getFirst());
+        for (int i = 1; i < lines.size(); i++) {
+            SvgLine l1 = mergedLines.getLast();
+            SvgLine l2 = lines.get(i);
+            System.out.println("distance: "+l1.getLastPoint().distance(l2.getFirstPoint()));
+            if (l1.getLastPoint().distance(l2.getFirstPoint()) < maxDistance) {
+                l1.addLine(l2);
             } else {
-                mergedPaths.add(e1);
-                mergedLastPath = false;
+                mergedLines.add(l2);
             }
         }
-        if(!mergedLastPath) {
-            mergedPaths.add(paths.getLast());
-        }
-        paths = mergedPaths;
+        paths = new LinkedList<>();
+        paths.addAll(mergedLines);
     }
 
     @Override
@@ -202,40 +215,137 @@ public class Svg {
         File file = new File(inputFile);
         Document doc = builder.parse(file);
         Node svg = doc.getElementsByTagName("svg").item(0);
-        int width = Integer.parseInt(svg.getAttributes().getNamedItem("width").getTextContent());
-        int height = Integer.parseInt(svg.getAttributes().getNamedItem("height").getTextContent());
-        NodeList nodes = svg.getChildNodes();
+        int width = Integer.parseInt(svg.getAttributes().getNamedItem("width").getTextContent().replaceAll("\\..*", ""));
+        int height = Integer.parseInt(svg.getAttributes().getNamedItem("height").getTextContent().replaceAll("\\..*", ""));
+        List<Node> pathNodes = stream(svg.getChildNodes()).flatMap(Svg::filterPath).toList();
         List<String> contents = new LinkedList<>();
-        for (int i = 0; i < nodes.getLength(); i++) {
-            Node node = nodes.item(i);
-            if (node.getNodeName().equalsIgnoreCase("path")) {
-                String content = node.getAttributes().getNamedItem("d").getTextContent();
-                content = content.replace("M", " M ");
-                content = content.replace("L", " L ");
-                content = content.replace("C", " C ");
-                contents.add(content.trim());
-            }
+        for (Node pathNode : pathNodes) {
+            String content = pathNode.getAttributes().getNamedItem("d").getTextContent();
+            contents.add(separateTokens(content));
         }
-        // TODO: directly parse into SvgLine or SvgBezierCurve
-        List<SvgElement> paths = new LinkedList<>();
-        for (String content : contents) {
-            String[] tokens = content.split(" +");
-            List<String> args = new LinkedList<>();
-            for (String token : tokens) {
-                if (token.equals("M")) {
-                    if (!args.isEmpty()) {
-                        paths.add(new Path(args));
-                    }
-                    args = new LinkedList<>();
-                    args.add(token);
+        List<String> tokens = contents.stream().flatMap(s -> Stream.of(s.split(" +"))).map(s -> s.replace("z", "")).toList();
+        List<SvgElement> elements = extractSvgElements(tokens);
+        return new Svg(width, height, elements);
+    }
+
+    private static String separateTokens(String content) {
+        String s = content;
+        for (String c : List.of("M", "L", "C")) {
+            s = s.replace(c.toUpperCase(), " " + c.toUpperCase() + " ");
+            s = s.replace(c.toLowerCase(), " " + c.toLowerCase() + " ");
+        }
+        return s.trim();
+    }
+
+    private static List<SvgElement> extractSvgElements(List<String> tokens) {
+        // TODO: handle z
+        List<SvgElement> elements = new LinkedList<>();
+        int i = 0;
+        String lastCommand = "M";
+        Point lastAbsolutePoint = null;
+        while (i < tokens.size()) {
+            String c = tokens.get(i);
+            if (c.equals("M")) {
+                lastCommand = c;
+                i++;
+                lastAbsolutePoint = handleAbsoluteMove(tokens, i);
+                i += 2;
+            } else if (c.equals("m")) {
+                lastCommand = c;
+                i++;
+                lastAbsolutePoint = handleRelativeMove(lastAbsolutePoint, tokens, i, elements);
+                i += 2;
+            } else if (c.equals("L")) {
+                lastCommand = c;
+                i++;
+                lastAbsolutePoint = handleAbsoluteLine(lastAbsolutePoint, tokens, i, elements);
+                i += 2;
+            } else if (c.equals("l")) {
+                lastCommand = c;
+                i++;
+                lastAbsolutePoint = handleRelativeLine(lastAbsolutePoint, tokens, i, elements);
+                i += 2;
+            } else if (c.equals("C")) {
+                lastCommand = c;
+                i++;
+                lastAbsolutePoint = handleAbsoluteBezier(lastAbsolutePoint, tokens, i, elements);
+                i += 6;
+            } else if (c.equals("c")) {
+                lastCommand = c;
+                i++;
+                lastAbsolutePoint = handleRelativeBezier(lastAbsolutePoint, tokens, i, elements);
+                i += 6;
+            } else {
+                if (lastCommand.equals("L")) {
+                    lastAbsolutePoint = handleAbsoluteLine(lastAbsolutePoint, tokens, i, elements);
+                    i += 2;
+                } else if (lastCommand.equals("l")) {
+                    lastAbsolutePoint = handleRelativeLine(lastAbsolutePoint, tokens, i, elements);
+                    i += 2;
+                } else if (lastCommand.equals("C")) {
+                    lastAbsolutePoint = handleAbsoluteBezier(lastAbsolutePoint, tokens, i, elements);
+                    i += 6;
+                } else if (lastCommand.equals("c")) {
+                    lastAbsolutePoint = handleRelativeBezier(lastAbsolutePoint, tokens, i, elements);
+                    i += 6;
                 } else {
-                    args.add(token);
+                    throw new IllegalStateException("Token not recognized: " + c);
                 }
             }
-            if (!args.isEmpty()) {
-                paths.add(new Path(args));
-            }
         }
-        return new Svg(width, height, paths);
+        return elements;
+    }
+
+    private static Point handleAbsoluteMove(List<String> tokens, int i) {
+        return new Point(Float.parseFloat(tokens.get(i)), Float.parseFloat(tokens.get(i + 1)));
+    }
+
+    private static Point handleRelativeMove(Point lastAbsolutePoint, List<String> tokens, int i, List<SvgElement> elements) {
+        return lastAbsolutePoint.addToCopy(new Point(Float.parseFloat(tokens.get(i)), Float.parseFloat(tokens.get(i + 1))));
+    }
+
+    private static Point handleAbsoluteLine(Point lastAbsolutePoint, List<String> tokens, int i, List<SvgElement> elements) {
+        Point end = new Point(Float.parseFloat(tokens.get(i)), Float.parseFloat(tokens.get(i + 1)));
+        elements.add(new SvgLine(lastAbsolutePoint, end));
+        return new Point(end);
+    }
+
+    private static Point handleRelativeLine(Point lastAbsolutePoint, List<String> tokens, int i, List<SvgElement> elements) {
+        Point end = lastAbsolutePoint.addToCopy(new Point(Float.parseFloat(tokens.get(i)), Float.parseFloat(tokens.get(i + 1))));
+        elements.add(new SvgLine(lastAbsolutePoint, end));
+        return new Point(end);
+    }
+
+    private static Point handleAbsoluteBezier(Point lastAbsolutePoint, List<String> tokens, int i, List<SvgElement> elements) {
+        Point c1 = new Point(Float.parseFloat(tokens.get(i)), Float.parseFloat(tokens.get(i + 1)));
+        Point c2 = new Point(Float.parseFloat(tokens.get(i + 2)), Float.parseFloat(tokens.get(i + 3)));
+        Point end = new Point(Float.parseFloat(tokens.get(i + 4)), Float.parseFloat(tokens.get(i + 5)));
+        elements.add(new SvgBezierCurve(lastAbsolutePoint, c1, c2, end));
+        return new Point(end);
+    }
+
+    private static Point handleRelativeBezier(Point lastAbsolutePoint, List<String> tokens, int i, List<SvgElement> elements) {
+        Point c1 = lastAbsolutePoint.addToCopy(new Point(Float.parseFloat(tokens.get(i)), Float.parseFloat(tokens.get(i + 1))));
+        Point c2 = lastAbsolutePoint.addToCopy(new Point(Float.parseFloat(tokens.get(i + 2)), Float.parseFloat(tokens.get(i + 3))));
+        Point end = lastAbsolutePoint.addToCopy(new Point(Float.parseFloat(tokens.get(i + 4)), Float.parseFloat(tokens.get(i + 5))));
+        elements.add(new SvgBezierCurve(lastAbsolutePoint, c1, c2, end));
+        return new Point(end);
+    }
+
+    private static Stream<Node> filterPath(Node node) {
+        if (node.getNodeName().equalsIgnoreCase("path")) {
+            return Stream.of(node);
+        } else if (node.getNodeName().equalsIgnoreCase("g")) {
+            return stream(node.getChildNodes());
+        }
+        return Stream.of();
+    }
+
+    private static Stream<Node> stream(NodeList nodes) {
+        List<Node> list = new LinkedList<>();
+        for (int i = 0; i < nodes.getLength(); i++) {
+            list.add(nodes.item(i));
+        }
+        return list.stream();
     }
 }

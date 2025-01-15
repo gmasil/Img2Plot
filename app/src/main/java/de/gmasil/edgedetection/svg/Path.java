@@ -1,12 +1,10 @@
 package de.gmasil.edgedetection.svg;
 
-import de.gmasil.edgedetection.svg.element.SvgElement;
-
 import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
 
-public class Path extends SvgElement {
+public class Path {
     private static final String PATH_TEMPLATE = """
             <path stroke-width="%f" style="fill:none; stroke:%s;" d="%s"/>
             """.replace("\n", "").trim();
@@ -68,12 +66,10 @@ public class Path extends SvgElement {
         this.length = calculateLength(points);
     }
 
-    @Override
     public Point getFirstPoint() {
         return points.getFirst();
     }
 
-    @Override
     public Point getLastPoint() {
         return points.getLast();
     }
@@ -110,7 +106,6 @@ public class Path extends SvgElement {
         isTravelLine = travelLine;
     }
 
-    @Override
     public String toSvgString() {
         return String.format(PATH_TEMPLATE, strokeWidth, strokeColor, String.join(" ", args));
     }
